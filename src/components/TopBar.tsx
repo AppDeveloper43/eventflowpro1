@@ -12,7 +12,7 @@ export default function TopBar({ searchQuery, onSearchChange }: TopBarProps) {
         <Search className="w-4 h-4 text-muted-foreground" />
         <input
           type="text"
-          placeholder="Search events, clients, vendors..."
+          placeholder="Events, clients, vendors talaash karein..."
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
           className="bg-transparent border-none outline-none text-sm text-foreground placeholder:text-muted-foreground w-full"

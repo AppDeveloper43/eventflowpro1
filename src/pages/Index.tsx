@@ -10,14 +10,14 @@ import TasksSection from "@/components/sections/TasksSection";
 import PlaceholderSection from "@/components/sections/PlaceholderSection";
 
 const placeholders: Record<string, { title: string; description: string }> = {
-  guests: { title: "Guest Management", description: "Manage guest lists, RSVPs, seating arrangements and dietary preferences." },
-  documents: { title: "Document Center", description: "Store and manage contracts, proposals, floor plans and all event documents." },
-  invoices: { title: "Invoice Management", description: "Create, send and track invoices and payment status for all events." },
-  calendar: { title: "Event Calendar", description: "View all events, deadlines and milestones in a unified calendar view." },
-  analytics: { title: "Analytics & Reports", description: "Detailed analytics on revenue, client acquisition, and event performance." },
-  templates: { title: "Event Templates", description: "Pre-built templates for weddings, corporate events, conferences and more." },
-  team: { title: "Team Management", description: "Manage team members, roles, assignments and collaboration." },
-  portal: { title: "Client Portal", description: "A dedicated portal for clients to view event progress and communicate." },
+  guests: { title: "Mehmaan Management", description: "Mehmaan ki list, RSVPs, seating arrangement aur khaane ki preferences manage karein." },
+  documents: { title: "Documents Center", description: "Contracts, proposals, floor plans aur sab event documents yahan rakhein." },
+  invoices: { title: "Invoice Management", description: "Invoices banayein, bhejein aur payment status track karein — sab events ke liye." },
+  calendar: { title: "Event Calendar", description: "Sab events, deadlines aur milestones ek calendar view mein dekhein." },
+  analytics: { title: "Analytics & Reports", description: "Revenue, client acquisition aur event performance ki detailed analytics." },
+  templates: { title: "Event Templates", description: "Pakistani shaadi ke liye ready-made templates: Mehndi, Baraat, Walima, Nikkah waghaira." },
+  team: { title: "Team Management", description: "Team members, roles, assignments aur collaboration manage karein." },
+  portal: { title: "Client Portal", description: "Clients ke liye dedicated portal jahan woh event progress dekh sakein aur baat kar sakein." },
 };
 
 export default function Index() {
