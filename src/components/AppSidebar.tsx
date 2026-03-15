@@ -41,7 +41,7 @@ const mainNav = [
   { id: "budget" as Section, label: "Budget", icon: TrendingUp },
   { id: "vendors" as Section, label: "Vendors", icon: Store },
   { id: "tasks" as Section, label: "Tasks", icon: ListTodo },
-  { id: "guests" as Section, label: "Guests", icon: UserCheck },
+  { id: "guests" as Section, label: "Mehmaan", icon: UserCheck },
   { id: "documents" as Section, label: "Documents", icon: FileText },
   { id: "invoices" as Section, label: "Invoices", icon: FileSpreadsheet },
   { id: "calendar" as Section, label: "Calendar", icon: Calendar },
