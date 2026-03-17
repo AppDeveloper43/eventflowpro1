@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import { CalendarDays, MapPin, Users, Plus, X, Trash2, Edit2, Clock, Undo2, FileDown } from "lucide-react";
 import { toast } from "sonner";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
