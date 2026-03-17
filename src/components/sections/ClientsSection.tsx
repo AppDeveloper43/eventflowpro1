@@ -38,7 +38,7 @@ export default function ClientsSection() {
 
   const filtered = clients.filter((c) => statusFilter === "all" || c.status === statusFilter);
 
-  const handleSave = useCallback((e: React.FormEvent<HTMLFormElement>) => {
+  const handleSave = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     const name = (fd.get("name") as string).trim();
@@ -65,9 +65,15 @@ export default function ClientsSection() {
     }
     setShowModal(false);
     setEditingId(null);
-  }, [editingId, setClients]);
+  };
 
-  const handleDelete = useCallback((id: number) => {
+  const handleUndo = (client: Client) => {
+    setClients((prev) => [client, ...prev]);
+    setDeletedStack((prev) => prev.filter((c) => c.id !== client.id));
+    toast.success("Client wapas aa gaya!");
+  };
+
+  const handleDelete = (id: number) => {
     const deleted = clients.find((c) => c.id === id);
     if (!deleted) return;
     setDeletedStack((prev) => [...prev, deleted]);
@@ -76,18 +82,12 @@ export default function ClientsSection() {
       action: { label: "Undo", onClick: () => handleUndo(deleted) },
       duration: 5000,
     });
-  }, [clients, setClients]);
+  };
 
-  const handleUndo = useCallback((client: Client) => {
-    setClients((prev) => [client, ...prev]);
-    setDeletedStack((prev) => prev.filter((c) => c.id !== client.id));
-    toast.success("Client wapas aa gaya!");
-  }, [setClients]);
-
-  const undoLast = useCallback(() => {
+  const undoLast = () => {
     if (deletedStack.length === 0) return;
     handleUndo(deletedStack[deletedStack.length - 1]);
-  }, [deletedStack, handleUndo]);
+  };
 
   const handleExportClientPDF = (client: Client) => {
     exportContactPDF(client);
