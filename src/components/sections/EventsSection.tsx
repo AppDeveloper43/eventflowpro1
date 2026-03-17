@@ -1,6 +1,8 @@
-import { useState } from "react";
-import { CalendarDays, MapPin, Users, Plus, X, Trash2, Edit2, Clock } from "lucide-react";
+import { useState, useCallback } from "react";
+import { CalendarDays, MapPin, Users, Plus, X, Trash2, Edit2, Clock, Undo2, FileDown } from "lucide-react";
 import { toast } from "sonner";
+import { useLocalStorage } from "@/hooks/useLocalStorage";
+import { exportFullReport } from "@/lib/pdfExport";
 
 interface Event {
   id: number;
@@ -27,6 +29,7 @@ function formatPKR(n: number) {
 }
 
 function daysUntil(date: string) {
+  if (!date) return "";
   const diff = Math.ceil((new Date(date).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
   if (diff < 0) return "Guzar chuka";
   if (diff === 0) return "Aaj hai!";
@@ -34,65 +37,125 @@ function daysUntil(date: string) {
 }
 
 export default function EventsSection() {
-  const [events, setEvents] = useState<Event[]>([]);
+  const [events, setEvents] = useLocalStorage<Event[]>("sp_events", []);
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [filterType, setFilterType] = useState("all");
+  const [deletedStack, setDeletedStack] = useState<Event[]>([]);
 
   const filtered = filterType === "all" ? events : events.filter((e) => e.type === filterType);
 
-  const handleSave = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSave = useCallback((e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
+    const name = (fd.get("name") as string).trim();
+    if (!name) { toast.error("Event ka naam daalein!"); return; }
+
     const ev: Event = {
       id: editingId ?? Date.now(),
-      name: fd.get("name") as string,
+      name,
       type: fd.get("type") as string,
       date: fd.get("date") as string,
-      venue: fd.get("venue") as string,
-      guests: Number(fd.get("guests")) || 0,
-      budget: Number(fd.get("budget")) || 0,
+      venue: (fd.get("venue") as string).trim(),
+      guests: Math.max(0, Number(fd.get("guests")) || 0),
+      budget: Math.max(0, Number(fd.get("budget")) || 0),
       status: (fd.get("status") as Event["status"]) || "planning",
-      notes: fd.get("notes") as string,
+      notes: (fd.get("notes") as string).trim(),
     };
+
     if (editingId) {
-      setEvents(events.map((ex) => (ex.id === editingId ? ev : ex)));
+      setEvents((prev) => prev.map((ex) => (ex.id === editingId ? ev : ex)));
       toast.success("Event update ho gaya!");
     } else {
-      setEvents([ev, ...events]);
+      setEvents((prev) => [ev, ...prev]);
       toast.success("Event add ho gaya!");
     }
     setShowModal(false);
     setEditingId(null);
-  };
+  }, [editingId, setEvents]);
 
-  const handleDelete = (id: number) => {
-    setEvents(events.filter((e) => e.id !== id));
-    toast.success("Event delete ho gaya!");
+  const handleDelete = useCallback((id: number) => {
+    const deleted = events.find((e) => e.id === id);
+    if (!deleted) return;
+    setDeletedStack((prev) => [...prev, deleted]);
+    setEvents((prev) => prev.filter((e) => e.id !== id));
+    toast.success("Event delete ho gaya!", {
+      action: { label: "Undo", onClick: () => handleUndo(deleted) },
+      duration: 5000,
+    });
+  }, [events, setEvents]);
+
+  const handleUndo = useCallback((event: Event) => {
+    setEvents((prev) => [event, ...prev]);
+    setDeletedStack((prev) => prev.filter((e) => e.id !== event.id));
+    toast.success("Event wapas aa gaya!");
+  }, [setEvents]);
+
+  const undoLast = useCallback(() => {
+    if (deletedStack.length === 0) return;
+    const last = deletedStack[deletedStack.length - 1];
+    handleUndo(last);
+  }, [deletedStack, handleUndo]);
+
+  const handleExportPDF = () => {
+    if (events.length === 0) { toast.error("Export ke liye koi event nahi hai!"); return; }
+    exportFullReport([], events.map((e) => ({
+      name: e.name, type: e.type, date: e.date, venue: e.venue,
+      guests: e.guests, budget: e.budget, status: e.status, notes: e.notes,
+    })));
+    toast.success("PDF download ho rahi hai!");
   };
 
   const editingEvent = editingId ? events.find((e) => e.id === editingId) : null;
+
+  // Summary stats
+  const totalEvents = events.length;
+  const totalBudget = events.reduce((s, e) => s + e.budget, 0);
+  const totalGuests = events.reduce((s, e) => s + e.guests, 0);
+  const confirmedCount = events.filter((e) => e.status === "confirmed").length;
 
   return (
     <div className="animate-fade-in">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-display font-bold text-gradient">Event Management</h1>
-        <button
-          onClick={() => { setEditingId(null); setShowModal(true); }}
-          className="bg-gradient-primary text-primary-foreground px-4 py-2.5 rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity duration-200 flex items-center gap-2 shadow-md"
-        >
-          <Plus className="w-4 h-4" /> Naya Event
-        </button>
+        <div className="flex items-center gap-2">
+          {deletedStack.length > 0 && (
+            <button onClick={undoLast}
+              className="bg-muted text-muted-foreground px-3 py-2.5 rounded-lg text-sm font-medium hover:text-foreground transition-colors flex items-center gap-1.5">
+              <Undo2 className="w-4 h-4" /> Undo
+            </button>
+          )}
+          <button onClick={handleExportPDF}
+            className="bg-muted text-muted-foreground px-3 py-2.5 rounded-lg text-sm font-medium hover:text-foreground transition-colors flex items-center gap-1.5">
+            <FileDown className="w-4 h-4" /> PDF Export
+          </button>
+          <button onClick={() => { setEditingId(null); setShowModal(true); }}
+            className="bg-gradient-primary text-primary-foreground px-4 py-2.5 rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity duration-200 flex items-center gap-2 shadow-md">
+            <Plus className="w-4 h-4" /> Naya Event
+          </button>
+        </div>
+      </div>
+
+      {/* Summary cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        {[
+          { label: "Total Events", value: totalEvents, color: "text-foreground" },
+          { label: "Confirmed", value: confirmedCount, color: "text-success" },
+          { label: "Total Mehmaan", value: totalGuests.toLocaleString(), color: "text-foreground" },
+          { label: "Total Budget", value: formatPKR(totalBudget), color: "text-foreground" },
+        ].map((s) => (
+          <div key={s.label} className="bg-card border border-border rounded-xl p-4 wedding-shadow">
+            <p className="text-xs text-muted-foreground font-medium">{s.label}</p>
+            <p className={`text-lg font-display font-bold ${s.color}`}>{s.value}</p>
+          </div>
+        ))}
       </div>
 
       {/* Filter pills */}
       <div className="flex gap-2 flex-wrap mb-6">
         {["all", ...eventTypes].map((t) => (
-          <button
-            key={t}
-            onClick={() => setFilterType(t)}
-            className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200 ${filterType === t ? "bg-gradient-primary text-primary-foreground shadow-sm" : "bg-muted text-muted-foreground hover:text-foreground"}`}
-          >
+          <button key={t} onClick={() => setFilterType(t)}
+            className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200 ${filterType === t ? "bg-gradient-primary text-primary-foreground shadow-sm" : "bg-muted text-muted-foreground hover:text-foreground"}`}>
             {t === "all" ? "Sab Events" : t}
           </button>
         ))}
@@ -121,10 +184,12 @@ export default function EventsSection() {
                 </div>
                 <div className="space-y-2 py-3 border-t border-b border-border/50">
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <CalendarDays className="w-4 h-4 text-primary" /> {ev.date}
-                    <span className="ml-auto text-xs font-medium text-secondary">
-                      <Clock className="w-3 h-3 inline mr-1" />{daysUntil(ev.date)}
-                    </span>
+                    <CalendarDays className="w-4 h-4 text-primary" /> {ev.date || "Date set nahi hua"}
+                    {ev.date && (
+                      <span className="ml-auto text-xs font-medium text-secondary">
+                        <Clock className="w-3 h-3 inline mr-1" />{daysUntil(ev.date)}
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <MapPin className="w-4 h-4 text-primary" /> {ev.venue || "Venue set nahi hua"}
@@ -136,10 +201,12 @@ export default function EventsSection() {
                 <div className="flex items-center justify-between mt-3">
                   <span className="font-display font-bold text-foreground">{formatPKR(ev.budget)}</span>
                   <div className="flex gap-1">
-                    <button onClick={() => { setEditingId(ev.id); setShowModal(true); }} className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-primary/10 transition-all">
+                    <button onClick={() => { setEditingId(ev.id); setShowModal(true); }}
+                      className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-primary/10 transition-all">
                       <Edit2 className="w-3.5 h-3.5" />
                     </button>
-                    <button onClick={() => handleDelete(ev.id)} className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all">
+                    <button onClick={() => handleDelete(ev.id)}
+                      className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all">
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
@@ -168,7 +235,7 @@ export default function EventsSection() {
               ].map((f) => (
                 <div key={f.name}>
                   <label className="block text-sm font-medium text-muted-foreground mb-1">{f.label}</label>
-                  <input name={f.name} type={f.type} placeholder={f.placeholder} defaultValue={f.def || ""} required={f.name === "name"}
+                  <input name={f.name} type={f.type} placeholder={f.placeholder} defaultValue={f.def ?? ""} required={f.name === "name"}
                     className="w-full bg-muted border border-border rounded-lg px-3 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30" />
                 </div>
               ))}
@@ -189,7 +256,8 @@ export default function EventsSection() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-muted-foreground mb-1">Notes</label>
-                <textarea name="notes" rows={2} defaultValue={editingEvent?.notes || ""} placeholder="Koi detail..." className="w-full bg-muted border border-border rounded-lg px-3 py-2.5 text-sm text-foreground resize-none focus:outline-none focus:ring-2 focus:ring-primary/30" />
+                <textarea name="notes" rows={2} defaultValue={editingEvent?.notes || ""} placeholder="Koi detail..."
+                  className="w-full bg-muted border border-border rounded-lg px-3 py-2.5 text-sm text-foreground resize-none focus:outline-none focus:ring-2 focus:ring-primary/30" />
               </div>
               <button type="submit" className="w-full bg-gradient-primary text-primary-foreground py-2.5 rounded-lg text-sm font-semibold hover:opacity-90 shadow-md">
                 {editingId ? "Update Karein" : "Event Save Karein"}

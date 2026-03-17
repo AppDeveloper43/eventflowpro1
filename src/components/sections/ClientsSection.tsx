@@ -1,6 +1,8 @@
-import { useState } from "react";
-import { Mail, Phone, CalendarDays, Users, Eye, Edit2, Trash2, Plus, X } from "lucide-react";
+import { useState, useCallback } from "react";
+import { Mail, Phone, CalendarDays, Users, Eye, Edit2, Trash2, Plus, X, Undo2, FileDown } from "lucide-react";
 import { toast } from "sonner";
+import { useLocalStorage } from "@/hooks/useLocalStorage";
+import { exportContactPDF, exportFullReport } from "@/lib/pdfExport";
 
 interface Client {
   id: number;
@@ -27,48 +29,82 @@ function formatPKR(n: number) {
 }
 
 export default function ClientsSection() {
-  const [clients, setClients] = useState<Client[]>([]);
+  const [clients, setClients] = useLocalStorage<Client[]>("sp_clients", []);
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [statusFilter, setStatusFilter] = useState("all");
   const [viewingClient, setViewingClient] = useState<Client | null>(null);
+  const [deletedStack, setDeletedStack] = useState<Client[]>([]);
 
   const filtered = clients.filter((c) => statusFilter === "all" || c.status === statusFilter);
 
-  const handleSave = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSave = useCallback((e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
+    const name = (fd.get("name") as string).trim();
+    if (!name) { toast.error("Client ka naam daalein!"); return; }
+
     const client: Client = {
       id: editingId ?? Date.now(),
-      name: fd.get("name") as string,
-      email: fd.get("email") as string,
-      phone: fd.get("phone") as string,
+      name,
+      email: (fd.get("email") as string).trim(),
+      phone: (fd.get("phone") as string).trim(),
       eventType: fd.get("eventType") as string,
       eventDate: fd.get("eventDate") as string,
-      guests: Number(fd.get("guests")) || 0,
-      budget: Number(fd.get("budget")) || 0,
+      guests: Math.max(0, Number(fd.get("guests")) || 0),
+      budget: Math.max(0, Number(fd.get("budget")) || 0),
       status: (fd.get("status") as Client["status"]) || "inquiry",
-      notes: fd.get("notes") as string,
+      notes: (fd.get("notes") as string).trim(),
     };
     if (editingId) {
-      setClients(clients.map((c) => (c.id === editingId ? client : c)));
+      setClients((prev) => prev.map((c) => (c.id === editingId ? client : c)));
       toast.success("Client update ho gaya!");
     } else {
-      setClients([client, ...clients]);
+      setClients((prev) => [client, ...prev]);
       toast.success("Client add ho gaya!");
     }
     setShowModal(false);
     setEditingId(null);
+  }, [editingId, setClients]);
+
+  const handleDelete = useCallback((id: number) => {
+    const deleted = clients.find((c) => c.id === id);
+    if (!deleted) return;
+    setDeletedStack((prev) => [...prev, deleted]);
+    setClients((prev) => prev.filter((c) => c.id !== id));
+    toast.success("Client delete ho gaya!", {
+      action: { label: "Undo", onClick: () => handleUndo(deleted) },
+      duration: 5000,
+    });
+  }, [clients, setClients]);
+
+  const handleUndo = useCallback((client: Client) => {
+    setClients((prev) => [client, ...prev]);
+    setDeletedStack((prev) => prev.filter((c) => c.id !== client.id));
+    toast.success("Client wapas aa gaya!");
+  }, [setClients]);
+
+  const undoLast = useCallback(() => {
+    if (deletedStack.length === 0) return;
+    handleUndo(deletedStack[deletedStack.length - 1]);
+  }, [deletedStack, handleUndo]);
+
+  const handleExportClientPDF = (client: Client) => {
+    exportContactPDF(client);
+    toast.success("Client PDF download ho rahi hai!");
   };
 
-  const handleDelete = (id: number) => {
-    setClients(clients.filter((c) => c.id !== id));
-    toast.success("Client delete ho gaya!");
+  const handleExportAllPDF = () => {
+    if (clients.length === 0) { toast.error("Export ke liye koi client nahi!"); return; }
+    exportFullReport(clients.map((c) => ({
+      name: c.name, email: c.email, phone: c.phone, eventType: c.eventType,
+      eventDate: c.eventDate, guests: c.guests, budget: c.budget, status: c.status, notes: c.notes,
+    })), []);
+    toast.success("PDF download ho rahi hai!");
   };
 
   const editingClient = editingId ? clients.find((c) => c.id === editingId) : null;
 
-  // Summary
   const totalClients = clients.length;
   const totalRevenue = clients.reduce((s, c) => s + c.budget, 0);
   const confirmedCount = clients.filter((c) => c.status === "confirmed").length;
@@ -77,12 +113,22 @@ export default function ClientsSection() {
     <div className="animate-fade-in">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-display font-bold text-gradient">Client Management</h1>
-        <button
-          onClick={() => { setEditingId(null); setShowModal(true); }}
-          className="bg-gradient-primary text-primary-foreground px-4 py-2.5 rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity duration-200 flex items-center gap-2 shadow-md"
-        >
-          <Plus className="w-4 h-4" /> Naya Client
-        </button>
+        <div className="flex items-center gap-2">
+          {deletedStack.length > 0 && (
+            <button onClick={undoLast}
+              className="bg-muted text-muted-foreground px-3 py-2.5 rounded-lg text-sm font-medium hover:text-foreground transition-colors flex items-center gap-1.5">
+              <Undo2 className="w-4 h-4" /> Undo
+            </button>
+          )}
+          <button onClick={handleExportAllPDF}
+            className="bg-muted text-muted-foreground px-3 py-2.5 rounded-lg text-sm font-medium hover:text-foreground transition-colors flex items-center gap-1.5">
+            <FileDown className="w-4 h-4" /> PDF Export
+          </button>
+          <button onClick={() => { setEditingId(null); setShowModal(true); }}
+            className="bg-gradient-primary text-primary-foreground px-4 py-2.5 rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity duration-200 flex items-center gap-2 shadow-md">
+            <Plus className="w-4 h-4" /> Naya Client
+          </button>
+        </div>
       </div>
 
       {/* Summary */}
@@ -104,11 +150,8 @@ export default function ClientsSection() {
       {/* Filters */}
       <div className="flex gap-2 mb-6">
         {["all", "inquiry", "negotiation", "confirmed", "completed"].map((s) => (
-          <button
-            key={s}
-            onClick={() => setStatusFilter(s)}
-            className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200 capitalize ${statusFilter === s ? "bg-gradient-primary text-primary-foreground shadow-sm" : "bg-muted text-muted-foreground hover:text-foreground"}`}
-          >
+          <button key={s} onClick={() => setStatusFilter(s)}
+            className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200 capitalize ${statusFilter === s ? "bg-gradient-primary text-primary-foreground shadow-sm" : "bg-muted text-muted-foreground hover:text-foreground"}`}>
             {s === "all" ? "Sab" : s}
           </button>
         ))}
@@ -150,9 +193,22 @@ export default function ClientsSection() {
                 <div className="flex items-center justify-between mt-3">
                   <span className="font-display font-bold text-foreground">{formatPKR(client.budget)}</span>
                   <div className="flex gap-1">
-                    <button onClick={() => setViewingClient(client)} className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-primary/10 transition-all"><Eye className="w-3.5 h-3.5" /></button>
-                    <button onClick={() => { setEditingId(client.id); setShowModal(true); }} className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-primary/10 transition-all"><Edit2 className="w-3.5 h-3.5" /></button>
-                    <button onClick={() => handleDelete(client.id)} className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all"><Trash2 className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => handleExportClientPDF(client)} title="Download PDF"
+                      className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-primary/10 transition-all">
+                      <FileDown className="w-3.5 h-3.5" />
+                    </button>
+                    <button onClick={() => setViewingClient(client)}
+                      className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-primary/10 transition-all">
+                      <Eye className="w-3.5 h-3.5" />
+                    </button>
+                    <button onClick={() => { setEditingId(client.id); setShowModal(true); }}
+                      className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-primary/10 transition-all">
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
+                    <button onClick={() => handleDelete(client.id)}
+                      className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 </div>
               </div>
@@ -178,6 +234,10 @@ export default function ClientsSection() {
               <p><strong className="text-foreground">Status:</strong> <span className={`capitalize ${statusStyles[viewingClient.status]} px-2 py-0.5 rounded-full text-xs`}>{viewingClient.status}</span></p>
               {viewingClient.notes && <p><strong className="text-foreground">Notes:</strong> <span className="text-muted-foreground">{viewingClient.notes}</span></p>}
             </div>
+            <button onClick={() => handleExportClientPDF(viewingClient)}
+              className="w-full mt-4 bg-gradient-primary text-primary-foreground py-2 rounded-lg text-sm font-semibold hover:opacity-90 flex items-center justify-center gap-2">
+              <FileDown className="w-4 h-4" /> Download PDF
+            </button>
           </div>
         </div>
       )}
@@ -201,7 +261,7 @@ export default function ClientsSection() {
               ].map((f) => (
                 <div key={f.name}>
                   <label className="block text-sm font-medium text-muted-foreground mb-1">{f.label}</label>
-                  <input name={f.name} type={f.type} placeholder={f.placeholder} defaultValue={f.def || ""} required={f.name === "name"}
+                  <input name={f.name} type={f.type} placeholder={f.placeholder} defaultValue={f.def ?? ""} required={f.name === "name"}
                     className="w-full bg-muted border border-border rounded-lg px-3 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30" />
                 </div>
               ))}
@@ -222,7 +282,8 @@ export default function ClientsSection() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-muted-foreground mb-1">Notes</label>
-                <textarea name="notes" rows={2} defaultValue={editingClient?.notes || ""} placeholder="Koi detail..." className="w-full bg-muted border border-border rounded-lg px-3 py-2.5 text-sm text-foreground resize-none focus:outline-none focus:ring-2 focus:ring-primary/30" />
+                <textarea name="notes" rows={2} defaultValue={editingClient?.notes || ""} placeholder="Koi detail..."
+                  className="w-full bg-muted border border-border rounded-lg px-3 py-2.5 text-sm text-foreground resize-none focus:outline-none focus:ring-2 focus:ring-primary/30" />
               </div>
               <button type="submit" className="w-full bg-gradient-primary text-primary-foreground py-2.5 rounded-lg text-sm font-semibold hover:opacity-90 shadow-md">
                 {editingId ? "Update Karein" : "Client Save Karein"}
