@@ -45,7 +45,7 @@ export default function EventsSection() {
 
   const filtered = filterType === "all" ? events : events.filter((e) => e.type === filterType);
 
-  const handleSave = useCallback((e: React.FormEvent<HTMLFormElement>) => {
+  const handleSave = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     const name = (fd.get("name") as string).trim();
@@ -72,9 +72,15 @@ export default function EventsSection() {
     }
     setShowModal(false);
     setEditingId(null);
-  }, [editingId, setEvents]);
+  };
 
-  const handleDelete = useCallback((id: number) => {
+  const handleUndo = (event: Event) => {
+    setEvents((prev) => [event, ...prev]);
+    setDeletedStack((prev) => prev.filter((e) => e.id !== event.id));
+    toast.success("Event wapas aa gaya!");
+  };
+
+  const handleDelete = (id: number) => {
     const deleted = events.find((e) => e.id === id);
     if (!deleted) return;
     setDeletedStack((prev) => [...prev, deleted]);
@@ -83,19 +89,12 @@ export default function EventsSection() {
       action: { label: "Undo", onClick: () => handleUndo(deleted) },
       duration: 5000,
     });
-  }, [events, setEvents]);
+  };
 
-  const handleUndo = useCallback((event: Event) => {
-    setEvents((prev) => [event, ...prev]);
-    setDeletedStack((prev) => prev.filter((e) => e.id !== event.id));
-    toast.success("Event wapas aa gaya!");
-  }, [setEvents]);
-
-  const undoLast = useCallback(() => {
+  const undoLast = () => {
     if (deletedStack.length === 0) return;
-    const last = deletedStack[deletedStack.length - 1];
-    handleUndo(last);
-  }, [deletedStack, handleUndo]);
+    handleUndo(deletedStack[deletedStack.length - 1]);
+  };
 
   const handleExportPDF = () => {
     if (events.length === 0) { toast.error("Export ke liye koi event nahi hai!"); return; }
