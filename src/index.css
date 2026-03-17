@@ -141,4 +141,13 @@
   .wedding-shadow {
     box-shadow: 0 4px 20px -4px hsla(340, 65%, 35%, 0.1), 0 2px 8px -2px hsla(30, 55%, 55%, 0.06);
   }
+
+  .animate-fade-in {
+    animation: fadeIn 0.3s ease-in-out;
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
